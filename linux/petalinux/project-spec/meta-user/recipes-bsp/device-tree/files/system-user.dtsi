@@ -1,0 +1,60 @@
+/include/ "system-conf.dtsi"
+
+/ {
+    model = "OpenSourceSDRLab 7100_2XAD9361";
+
+    status-leds {
+        compatible = "gpio-leds";
+
+        fmcomms5-status {
+            label = "fmcomms5:heartbeat";
+            /* Schematic V1.0 page 2: White1 / PS_LED / MIO7 / B24. */
+            gpios = <&gpio0 7 0>; /* active high */
+            default-state = "off";
+            /* MIO7 = PS_LED: blink as the board heartbeat. */
+            linux,default-trigger = "heartbeat";
+        };
+    };
+};
+
+/*
+ * External LO (ADF5355), configured as in the FMCOMMS5 ZC706 reference design.
+ *
+ * EXT_LO_IN of this board comes from RFOUTA of the ADF5355 (schematic sheet
+ * AD9361_CLK_LO, IC17 ADF5355BCPZ) and reaches the TX / RX EXT_LO_IN pins of
+ * both AD9361 through a matching network and an ADCLK925. RFOUTB is unused
+ * and stays off.
+ *
+ * Parameters taken from the FMCOMMS5 ZC706 reference design
+ * (zynq-zc706-adv7511-ad9361-fmcomms5-ext-lo-adf5355.dts):
+ *   adi,output-a-enable         RFOUTA on (set in that base DTS)
+ *   adi,clock-shift = <2>       the AD9361 driver requests LO/2; ADF5355
+ *                               channel 0 is set to 4 x (LO/2) = 2 x LO
+ *   adi,power-up-frequency      4.8 GHz => EXT_LO_IN 4.8 GHz => LO of both
+ *                               AD9361 = 2.4 GHz
+ *
+ * The output can be controlled at run time through the ADF5355 IIO attributes:
+ *   out_altvoltage0_frequency / out_altvoltage0_powerdown  -> RFOUTA (external LO)
+ *   out_altvoltage1_frequency / out_altvoltage1_powerdown  -> RFOUTB (unused)
+ */
+&lo_adf5355 {
+	adi,clock-shift = <2>;
+	adi,power-up-frequency = /bits/ 64 <4800000000>;
+	/*
+	 * PDBRF / RFOUTA power-down: schematic net 5355_RF_EN -> FPGA AE20,
+	 * EMIO GPIO 57 = &gpio0 111. The ADF5355 data sheet requires this
+	 * pin not to float: high = RFOUTA enabled, low = powered down.
+	 * The driver keeps it in sync with out_altvoltage0_powerdown.
+	 */
+	adi,pdbrf-gpio = <&gpio0 111 0>;
+};
+
+&adc0_ad9361 {
+	adi,rx-synthesizer-frequency-hz = /bits/ 64 <2400000000>;
+	adi,tx-synthesizer-frequency-hz = /bits/ 64 <2400000000>;
+};
+
+&adc1_ad9361 {
+	adi,rx-synthesizer-frequency-hz = /bits/ 64 <2400000000>;
+	adi,tx-synthesizer-frequency-hz = /bits/ 64 <2400000000>;
+};

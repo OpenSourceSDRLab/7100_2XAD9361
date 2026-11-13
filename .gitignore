@@ -1,0 +1,18 @@
+# Vivado / Vitis generated files (prebuilt files are attached to Releases)
+*.cache/
+*.gen/
+*.runs/
+*.sim/
+*.hw/
+*.ip_user_files/
+*.jou
+*.log
+*.dcp
+.Xil/
+.metadata/
+.DS_Store
+
+# PetaLinux build output
+linux/petalinux/build/
+linux/petalinux/images/
+linux/petalinux/components/

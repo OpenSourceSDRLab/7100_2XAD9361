@@ -1,0 +1,60 @@
+#!/bin/sh
+# FMCOMMS5 AD9361 readiness monitor.
+#
+# The PS_LED heartbeat is owned by the kernel
+# (linux,default-trigger = "heartbeat" in the device tree), so this monitor
+# never touches the LED: the heartbeat must not stop when a radio is slow to
+# come up. It only reports radio state to syslog, which keeps a missing or
+# failed AD9361 visible without killing the heartbeat.
+#
+# The two AD9361 IIO devices are named after their device tree nodes:
+#   ad9361-phy   -> ad9361-phy@0   (U1)
+#   ad9361-phy-B -> ad9361-phy-B@1 (U2)
+# (the driver uses spi->dev.of_node->name as the IIO device name, so a plain
+#  "ad9361-phy" comparison only ever matches the first chip).
+#
+# ensm_mode readback names come from REG_STATE: sleep/alert/tx/tx flush/rx/
+# rx_flush/fdd/fdd_flush.
+
+sysfs=${FMCOMMS5_HEARTBEAT_SYSFS:-/sys}
+interval=${FMCOMMS5_HEARTBEAT_INTERVAL:-2}
+
+read_attr() {
+    cat "$1" 2>/dev/null
+}
+
+radio_status() {
+    count=0
+    status=
+    for dev in "$sysfs"/bus/iio/devices/iio:device*; do
+        name=$(read_attr "$dev/name")
+        case "$name" in
+            ad9361-phy*) ;;
+            *) continue ;;
+        esac
+        count=$((count + 1))
+        mode=$(read_attr "$dev/ensm_mode")
+        case "$mode" in
+            fdd|fdd_flush|tx|rx) status="$status $name=$mode" ;;
+            *) status="$status $name=${mode:-unknown}!" ;;
+        esac
+    done
+    printf 'radios=%d%s' "$count" "$status"
+}
+
+state=unknown
+trap 'exit 0' TERM INT
+
+while :; do
+    line=$(radio_status)
+    case "$line" in
+        *!) new=degraded ;;
+        radios=2*) new=ready ;;
+        *) new=incomplete ;;
+    esac
+    if [ "$new" != "$state" ]; then
+        state=$new
+        logger -t fmcomms5-heartbeat "$new: $line"
+    fi
+    sleep "$interval"
+done
